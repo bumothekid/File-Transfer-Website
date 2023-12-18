@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://unpkg.com/htmx.org@1.9.9"></script>
+    <title>File Transfer - Download</title>
+</head>
+<body>
+    <h1> {{ .Name }} is ready to download!</h1>
+        
+    <form action="/download/{{ .UniqueID }}">
+        <input type="submit" value="Download File" name="submit">
+    </form>
+</body>
+</html>
