@@ -11,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/jasonlvhit/gocron"
 )
 
 type File struct {
@@ -61,6 +63,62 @@ func generateRandomID(length int) string {
 	}
 
 	return randomID
+}
+
+func deleteOldFiles() {
+	var database map[string]FileDatabase
+
+	file, err := os.Open("storage.json")
+
+	if os.IsNotExist(err) {
+		file, err = os.Create("storage.json")
+
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+	}
+
+	json.NewDecoder(file).Decode(&database)
+	defer file.Close()
+
+	change := false
+
+	for _, file := range database {
+		if time.Now().Unix()-file.UploadTime > 86400*14 {
+			change = true
+			os.Remove(file.Path)
+			delete(database, file.UniqueID)
+		}
+	}
+
+	if !change {
+		return
+	}
+
+	storage, err := os.OpenFile("storage.json", os.O_RDWR, 0644)
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	storage.Truncate(0)
+	storage.Seek(0, 0)
+
+	encoder := json.NewEncoder(storage)
+	encoder.Encode(database)
+	defer storage.Close()
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+}
+
+func executeEvery(function func(), seconds int) {
+	gocron.Every(uint64(seconds)).Seconds().Do(function)
+	<-gocron.Start()
 }
 
 func homePage(w http.ResponseWriter, r *http.Request) {
@@ -123,9 +181,6 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 
 	json.NewDecoder(storage).Decode(&fileDatabase)
 
-	fmt.Println("Old file database:")
-	fmt.Println(fileDatabase)
-
 	fileDatabase[randomID] = FileDatabase{
 		UniqueID:   randomID,
 		Path:       fmt.Sprintf("storage/%s.%s", randomID, strings.Split(fileHeader.Filename, ".")[1]),
@@ -149,9 +204,6 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	fmt.Println("New file bytes:")
-	fmt.Println(newFileBytes)
 
 	template := template.Must(template.ParseFiles("templates/upload.html"))
 	fileHead := File{FileName: fileHeader.Filename}
@@ -233,11 +285,12 @@ func downloadFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment; filename="+fileInfo.Name)
 
 	http.ServeFile(w, r, fileInfo.Path)
-	return
 }
 
 func main() {
-	fmt.Print("Starting server...")
+	deleteOldFiles()
+	go executeEvery(deleteOldFiles, 60*60*12) // 12 hours
+	fmt.Println("Starting server...")
 
 	http.HandleFunc("/", homePage)
 	http.HandleFunc("/upload", uploadFile)
