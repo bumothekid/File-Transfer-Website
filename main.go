@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,12 +25,21 @@ type FileDatabase struct {
 	UniqueID   string `json:"uniqueID"`
 	Path       string `json:"path"`
 	Name       string `json:"name"`
-	UploadTime int64  `json:"uploadTime"`
+	UploadTime string `json:"uploadTime"`
 	Type       string `json:"type"`
 }
 
 type FileDatabaseJSON struct {
 	Files []FileDatabase `json:"files"`
+}
+
+func dateFormat(layout string, d int64) string {
+	intTime := int64(d)
+	t := time.Unix(intTime, 0)
+	if layout == "" {
+		layout = "2006-01-02 15:04:05"
+	}
+	return t.Format(layout)
 }
 
 func generateRandomID(length int) string {
@@ -86,7 +96,8 @@ func deleteOldFiles() {
 	change := false
 
 	for _, file := range database {
-		if time.Now().Unix()-file.UploadTime > 86400*14 {
+		uploadTime, _ := strconv.ParseInt(file.UploadTime, 10, 64)
+		if time.Now().Unix()-uploadTime > 86400*14 {
 			change = true
 			os.Remove(file.Path)
 			delete(database, file.UniqueID)
@@ -170,7 +181,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		UniqueID:   randomID,
 		Path:       fmt.Sprintf("storage/%s.%s", randomID, strings.Split(fileHeader.Filename, ".")[1]),
 		Name:       fileHeader.Filename,
-		UploadTime: time.Now().Unix(),
+		UploadTime: strconv.FormatInt(time.Now().Unix(), 10),
 		Type:       fileHeader.Header.Get("Content-Type"),
 	}
 
@@ -241,6 +252,12 @@ func showFilePage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fileInfo := database[fileUniqueID]
+	uploadTime, err := strconv.ParseInt(fileInfo.UploadTime, 10, 64)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	fileInfo.UploadTime = dateFormat("", uploadTime)
 
 	template := template.Must(template.ParseFiles("templates/download.html"))
 	template.Execute(w, fileInfo)
@@ -274,6 +291,12 @@ func downloadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fileInfo := database[fileUniqueID]
+	uploadTime, err := strconv.ParseInt(fileInfo.UploadTime, 10, 64)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	fileInfo.UploadTime = dateFormat("", uploadTime)
 
 	file, err = os.Open(fileInfo.Path)
 	if err != nil {
@@ -300,6 +323,11 @@ func main() {
 	http.HandleFunc("/static/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, ".css") {
 			w.Header().Set("Content-Type", "text/css")
+			http.ServeFile(w, r, r.URL.Path[1:])
+		}
+
+		if strings.HasSuffix(r.URL.Path, ".png") {
+			w.Header().Set("Content-Type", "image/png")
 			http.ServeFile(w, r, r.URL.Path[1:])
 		}
 	})
