@@ -297,6 +297,12 @@ func main() {
 	http.HandleFunc("/upload", uploadFile)
 	http.HandleFunc("/storage/", showFilePage)
 	http.HandleFunc("/download/", downloadFile)
+	http.HandleFunc("/static/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".css") {
+			w.Header().Set("Content-Type", "text/css")
+			http.ServeFile(w, r, r.URL.Path[1:])
+		}
+	})
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
