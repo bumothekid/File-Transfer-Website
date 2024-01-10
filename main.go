@@ -17,6 +17,7 @@ import (
 
 type File struct {
 	FileName string
+	UniqueID string
 }
 
 type FileDatabase struct {
@@ -143,22 +144,6 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	destinationFile, err := os.Create(fmt.Sprintf("storage/%s", fileHeader.Filename))
-
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	defer destinationFile.Close()
-
-	_, err = io.Copy(destinationFile, file)
-
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	storage, err := os.OpenFile("storage.json", os.O_RDWR, 0644)
 
 	if os.IsNotExist(err) {
@@ -205,8 +190,24 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	destinationFile, err := os.Create(fmt.Sprintf("storage/%s.%s", randomID, strings.Split(fileHeader.Filename, ".")[1]))
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	defer destinationFile.Close()
+
+	_, err = io.Copy(destinationFile, file)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	template := template.Must(template.ParseFiles("templates/upload.html"))
-	fileHead := File{FileName: fileHeader.Filename}
+	fileHead := File{FileName: fileHeader.Filename, UniqueID: randomID}
 	template.Execute(w, fileHead)
 }
 
